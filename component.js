@@ -10,12 +10,10 @@ class React_root_component extends REACT.Component {
         // - props.is_app_root
         // - props.dom_element
         // - props.routes
-        this_component.state = VALIDATION.ensure_valid_url_params(
-            props.is_app_root ? window.location : props,
-            ); // eslint-disable-line indent
-        this_component.nonexistant_route = this_component.find_route('?')
-            || this_component.find_route('404')
-            || this_component.find_route(404)
+        this_component.state = {};
+        this_component.nonexistant_route = find_route.call(this_component, '?')
+            || find_route.call(this_component, '404')
+            || find_route.call(this_component, 404)
             || null
             ; // eslint-disable-line indent
         return this_component;
@@ -23,29 +21,15 @@ class React_root_component extends REACT.Component {
 
     render() {
         const this_component = this;
-        const { dom_element, is_app_root } = this_component.props;
-        const { url, path, query, fragment } = this_component.state;
-
-        const route = this_component.find_route(path);
-        if (route) {
-            dom_element.classList.add('react-rooter-routed');
-            const route_props = Object.assign(
-                route.props,
-                { url, path, query, fragment },
-                ); // eslint-disable-line indent
-            if (is_app_root) {
-                document.title
-                    = String(route.component.compose_title(route_props))
-                    ; // eslint-disable-line indent
-            }
-            return REACT.createElement(route.component, route.props);
+        const { path } = this_component.state;
+        if (!path) {
+            return null;
         }
-
-        dom_element.classList.remove('react-rooter-routed');
-        dom_element.classList.add('react-rooter-no-route');
-        return REACT.createElement(
-            `Route not found for "${ path }". And no "?" route is defined.`,
-            ); // eslint-disable-line indent
+        const route = find_route.call(this_component, path);
+        if (route) {
+            return render_route.call(this_component, route);
+        }
+        return render_no_route.call(this_component);
     }
 
     componentDidMount() {
@@ -78,31 +62,19 @@ class React_root_component extends REACT.Component {
 // Non-React instance methods (non-enumerable)
 Object.defineProperties(React_root_component.prototype, {
     set_path: { value: set_path },
-    find_route: { value: find_route },
     }); // eslint-disable-line indent
 
 export default React_root_component;
 
 // -----------
 
-function on_hashchange(hashchange_event) {
-    const this_component = this;
-    this_component.set_path(hashchange_event.newURL);
-    return true;
-}
-
-function on_popstate() {
-    const this_component = this;
-    this_component.set_path(window.location);
-    return true;
-}
-
 function set_path(params) {
     const this_component = this;
     const current_url = this_component.state.url;
     const new_url_params = VALIDATION.ensure_valid_url_params(params);
     const new_url = new_url_params.url;
-    if (current_url.pathname !== new_url.pathname
+    if (!current_url
+        || current_url.pathname !== new_url.pathname
         || current_url.query !== new_url.query
         || current_url.hash !== new_url.hash
         ) { // eslint-disable-line indent
@@ -117,20 +89,69 @@ function find_route(raw_requested_path) {
     const requested_path = VALIDATION.ensure_valid_path(raw_requested_path);
     for (let i = 0, n = routes.length - 1; i <= n; i++) {
         const route = routes[i];
-        const { path, pattern, component } = routes[i];
+        const { path, pattern } = routes[i];
         if (requested_path === path) {
-            return { component, props: {} };
+            return compose_resolved_route.call(this_component, { route });
         } else if (pattern) {
             const matches = pattern.exec(requested_path);
             if (matches) {
-                return {
-                    component,
-                    props: compose_page_props(route, matches.slice(1)),
-                    }; // eslint-disable-line
+                return compose_resolved_route.call(this_component, {
+                    route,
+                    captures: matches.slice(1),
+                    }); // eslint-disable-line indent
             }
         }
     }
     return this_component.nonexistant_route || null;
+}
+
+function render_route(route) {
+    const this_component = this;
+    const { dom_element, is_app_root } = this_component.props;
+    const { url, path, query, fragment } = this_component.state;
+    dom_element.classList.add('react-rooter-routed');
+    const route_props = Object.assign(
+        route.props,
+        { url, path, query, fragment },
+        ); // eslint-disable-line indent
+    if (is_app_root) {
+        document.title
+            = String(route.component.compose_title(route_props))
+            ; // eslint-disable-line indent
+    }
+    return REACT.createElement(route.component, route.props);
+}
+
+function render_no_route() {
+    const this_component = this;
+    const { dom_element } = this_component.props;
+    const { path } = this_component.state;
+
+    dom_element.classList.remove('react-rooter-routed');
+    dom_element.classList.add('react-rooter-no-route');
+    return REACT.createElement(
+        `Route not found for "${ path }". And no "?" route is defined.`,
+        ); // eslint-disable-line indent
+}
+
+// -----------
+
+function compose_resolved_route(params) {
+    const this_component = this;
+    const { route, captures } = params;
+    const { redirect_to, component } = route;
+    return redirect_to
+        ? redirect(this_component, redirect_to)
+        : captures
+            ? { component, props: compose_page_props(route, captures) }
+            : { component, props: {} }
+        ; // eslint-disable-line indent
+}
+function redirect(component, path) {
+    component.props.is_app_root
+        && window.history.pushState({}, '', path)
+        ; // eslint-disable-line indent
+    return find_route.call(component, path);
 }
 
 function compose_page_props(route, route_pattern_matches) {
@@ -143,4 +164,18 @@ function compose_page_props(route, route_pattern_matches) {
         }
     }
     return page_props;
+}
+
+// -----------
+
+function on_hashchange(hashchange_event) {
+    const this_component = this;
+    this_component.set_path(hashchange_event.newURL);
+    return true;
+}
+
+function on_popstate() {
+    const this_component = this;
+    this_component.set_path(window.location);
+    return true;
 }

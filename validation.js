@@ -17,15 +17,17 @@ function ensure_valid_routes(raw_routes) {
         ; // eslint-disable-line indent
     const routes = [];
     for (let i = 0, n = raw_routes.length - 1; i <= n; i++) {
-        const { path, pattern, pattern_tokens, component } = raw_routes[i];
-        path
-            ? (pattern || pattern_tokens)
-                && throw_error(
+        const raw_route = raw_routes[i];
+        raw_route.path
+            ? raw_route.pattern || raw_route.pattern_tokens
+                ? throw_error(
                     'If route.path is defined,',
                     'route.pattern and route.pattern_tokens are invalid',
                     ) // eslint-disable-line indent
-            : pattern
-                ? !(pattern instanceof RegExp)
+                : 'string' !== typeof raw_route.path
+                    && throw_type_error('route.path must be a string')
+            : raw_route.pattern
+                ? !(raw_route.pattern instanceof RegExp)
                     && throw_type_error(
                         'route.pattern must be a regular expression',
                         ) // eslint-disable-line indent
@@ -34,14 +36,25 @@ function ensure_valid_routes(raw_routes) {
                     'or route.pattern must be regular expression',
                     ) // eslint-disable-line indent
             ; // eslint-disable-line indent
-        !(component.prototype instanceof REACT.Component)
-            && throw_type_error('route.component must be a React Component')
+        raw_route.redirect_to
+            ? 'string' !== typeof raw_route.redirect_to
+                ? throw_type_error('route.redirect_to must be a string')
+                : raw_route.component
+                    && throw_error(
+                        'If route.redirect_to is defined,',
+                        'route.component is invalid',
+                        ) // eslint-disable-line indent
+            : !(raw_route.component.prototype instanceof REACT.Component)
+                && throw_type_error('route.component must be a React Component')
             ; // eslint-disable-line indent
         routes.push({
-            path: path ? ensure_valid_path(path) : null,
-            pattern: pattern || null,
-            pattern_tokens: ensure_valid_pattern_tokens(pattern_tokens),
-            component,
+            path: raw_route.path ? ensure_valid_path(raw_route.path) : null,
+            pattern: raw_route.pattern || null,
+            pattern_tokens:
+                ensure_valid_pattern_tokens(raw_route.pattern_tokens)
+                , // eslint-disable-line
+            redirect_to: raw_route.redirect_to || null,
+            component: raw_route.component,
             }); // eslint-disable-line indent
     }
     return routes;
@@ -98,7 +111,7 @@ function ensure_valid_url_params(params) {
                 ].join('')); // eslint-disable-line indent
             return { url, path, query, fragment };
         }
-        throw_error(
+        return throw_error(
             'path, query, or fragment',
             'must be provided in order to compose valid url data',
             ); // eslint-disable-line indent
@@ -130,18 +143,12 @@ function ensure_valid_path(raw_path) {
     } else if ('string' === typeof raw_path) {
         // eslint-disable-next-line prefer-template
         return '/' + raw_path
-            .split('/').filter(filter_out_falsey_values).join('/')
+            .split('/').filter(Boolean).join('/')
             // ^ trims leading, trailing, and repeated slashes
             .toLowerCase()
             ; // eslint-disable-line indent
     }
     return throw_type_error('path must be either a string or the number 404');
-
-    // -----------
-
-    function filter_out_falsey_values(value) {
-        return value;
-    }
 }
 
 function ensure_valid_query(raw_query) {
@@ -181,12 +188,12 @@ function ensure_valid_fragment(raw_fragment) {
 
 // -----------
 
-function throw_error(error_message) {
+function throw_error(...error_message) {
     throw new Error(format_error_message(error_message));
 }
-function throw_type_error(error_message) {
+function throw_type_error(...error_message) {
     throw new TypeError(format_error_message(error_message));
 }
-function format_error_message(...error_message) {
+function format_error_message(error_message) {
     return error_message.map(String).join(' ');
 }

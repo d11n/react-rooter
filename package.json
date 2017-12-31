@@ -1,6 +1,6 @@
 {
     "name": "react-rooter",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Create one or more react root elements and route which component they render via the URL or manually setting paths",
     "author": "Derek Dunagan",
     "license": "MIT",

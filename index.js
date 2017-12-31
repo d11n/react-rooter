@@ -25,11 +25,13 @@ function React_root(params) {
 
     // Props that initialize state (so let the component validate)
     if (!this_root.is_app_root) {
-        this_root.url = params.url;
-        this_root.path = params.path;
-        this_root.query = params.query;
-        this_root.fragment = params.fragment;
+        this_root.url = params.url || null;
+        this_root.path = params.path || null;
+        this_root.query = params.query || null;
+        this_root.fragment = params.fragment || null;
     }
+
+    this_root.page = null;
 
     return this_root;
 }
@@ -38,9 +40,16 @@ function go_to(params) {
     const this_root = this;
     const url_params = VALIDATION.ensure_valid_url_params(params);
     this_root.is_app_root
+        && params !== window.location
         && window.history.pushState({}, '', url_params.url)
         ; // eslint-disable-line indent
-    this_root.page.setState(url_params);
+    if (this_root.page) {
+        this_root.page.set_path(url_params);
+    } else {
+        throw new Error(
+            'A React Root must be rendered before it can route anything',
+            ); // eslint-disable-line indent
+    }
     return true;
 }
 
@@ -54,21 +63,22 @@ function on_click_local_hyperlink(click_event) {
 
 function render_root(element) {
     const this_root = this;
-    const { is_app_root, routes, path, query, fragment } = this_root;
-    const dom_element = element instanceof HTMLElement
+    const { is_app_root, routes } = this_root;
+    const dom_element = this_root.dom_element = element instanceof HTMLElement
         ? element
         : document.getElementById(element)
-        ;
+        ; // eslint-disable-line indent
 
     const page_react_element = REACT.createElement(React_root_component, {
         dom_element,
         is_app_root,
         routes,
-        path,
-        query,
-        fragment,
         }); // eslint-disable-line
     this_root.page = REACT_DOM.render(page_react_element, dom_element);
+    is_app_root
+        ? this_root.go_to(window.location)
+        : this_root.go_to(this_root)
+        ; // eslint-disable-line
 
     if (is_app_root) {
         const hyperlinks = document.querySelectorAll('a[href]');
